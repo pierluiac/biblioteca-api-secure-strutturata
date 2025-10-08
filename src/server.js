@@ -1,214 +1,103 @@
-/**
- * Server Principale - Biblioteca API Secure Strutturata
- * Architettura modulare con autenticazione JWT e separazione delle responsabilità
- */
-
 const express = require('express');
-const path = require('path');
-
-// Importazione configurazione
+const http = require('http');
 const config = require('./config/config');
-const database = require('./config/database');
+const db = require('./config/database'); // Inizializza il database
+const applyMiddleware = require('./middleware/config');
+const loggingMiddleware = require('./middleware/logging');
+const { errorHandler } = require('./middleware/errorHandler');
 
-// Importazione middleware
-const { morganLogger, requestLogger, errorLogger } = require('./middleware/logging');
-const { corsMiddleware, jsonParser, securityHeaders, apiInfo, addTimestamp } = require('./middleware/config');
-const { notFoundHandler, errorHandler, jsonErrorHandler } = require('./middleware/errorHandler');
-const { authenticateToken, authorize, rateLimitByUser } = require('./middleware/auth');
-
-// Importazione routes
+// Importa le rotte
 const mainRoutes = require('./routes/mainRoutes');
 const authRoutes = require('./routes/authRoutes');
 const libriRoutes = require('./routes/libriRoutes');
 const utentiRoutes = require('./routes/utentiRoutes');
 const prestitiRoutes = require('./routes/prestitiRoutes');
 
-class BibliotecaSecureServer {
-    constructor() {
-        this.app = express();
-        this.server = null;
-        this.setupMiddleware();
-        this.setupRoutes();
-        this.setupErrorHandling();
-    }
+const app = express();
+const server = http.createServer(app);
 
-    /**
-     * Configurazione middleware
-     */
-    setupMiddleware() {
-        // Middleware di sicurezza
-        this.app.use(securityHeaders);
-        this.app.use(apiInfo);
-        this.app.use(addTimestamp);
+// Applica middleware globali
+applyMiddleware(app);
+app.use(loggingMiddleware);
 
-        // Middleware CORS
-        this.app.use(corsMiddleware);
+// Rotte API
+app.use('/', mainRoutes); // Health check e info API
+app.use('/api/auth', authRoutes);
+app.use('/api/libri', libriRoutes);
+app.use('/api/utenti', utentiRoutes);
+app.use('/api/prestiti', prestitiRoutes);
 
-        // Middleware di logging
-        this.app.use(morganLogger);
-        this.app.use(requestLogger);
-
-        // Middleware di parsing
-        this.app.use(jsonParser);
-        this.app.use(express.urlencoded({ extended: true }));
-
-        // Middleware per gestione errori JSON
-        this.app.use(jsonErrorHandler);
-
-        // Rate limiting per utenti autenticati
-        this.app.use('/api', rateLimitByUser(100, 15 * 60 * 1000));
-    }
-
-    /**
-     * Configurazione routes
-     */
-    setupRoutes() {
-        // Routes pubbliche
-        this.app.use('/', mainRoutes);
-        this.app.use('/health', mainRoutes);
-        this.app.use('/api', mainRoutes);
-        this.app.use('/api/auth', authRoutes);
-
-        // Routes protette
-        this.app.use('/api/libri', authenticateToken, libriRoutes);
-        this.app.use('/api/utenti', authenticateToken, utentiRoutes);
-        this.app.use('/api/prestiti', authenticateToken, prestitiRoutes);
-    }
-
-    /**
-     * Configurazione gestione errori
-     */
-    setupErrorHandling() {
-        // Route 404
-        this.app.use(notFoundHandler);
-
-        // Middleware di logging errori
-        this.app.use(errorLogger);
-
-        // Middleware di gestione errori
-        this.app.use(errorHandler);
-    }
-
-    /**
-     * Inizializzazione database
-     */
-    async initializeDatabase() {
-        try {
-            await database.connect();
-            await database.initializeTables();
-            await database.seedData();
-            console.log('✅ Database inizializzato correttamente');
-        } catch (error) {
-            console.error('❌ Errore inizializzazione database:', error.message);
-            throw error;
+// Gestione delle route non trovate (404)
+app.use((req, res, next) => {
+    res.status(404).json({
+        success: false,
+        error: {
+            message: 'Route non trovata',
+            path: req.originalUrl,
+            method: req.method,
+            status: 404
         }
-    }
-
-    /**
-     * Avvio del server
-     */
-    async start() {
-        try {
-            // Inizializza database
-            await this.initializeDatabase();
-
-            // Avvia server
-            this.server = this.app.listen(config.server.port, config.server.host, () => {
-                console.log(`🔐 Biblioteca API Secure Server Strutturato in ascolto su ${config.server.host}:${config.server.port}`);
-                console.log(`📚 Ambiente: ${config.server.environment}`);
-                console.log(`📚 Versione API: ${config.api.version}`);
-                console.log(`📚 Database: ${config.database.path}`);
-                console.log(`📚 JWT Secret: ${config.jwt.secret.substring(0, 10)}...`);
-                console.log(`📚 API disponibili:`);
-                console.log(`   - GET    /health`);
-                console.log(`   - GET    /api`);
-                console.log(`   - GET    /api/status`);
-                console.log(`   - POST   /api/auth/register`);
-                console.log(`   - POST   /api/auth/login`);
-                console.log(`   - GET    /api/libri (protetto)`);
-                console.log(`   - GET    /api/utenti (protetto)`);
-                console.log(`   - GET    /api/prestiti (protetto)`);
-                console.log(`📚 Documentazione: http://${config.server.host}:${config.server.port}/api`);
-            });
-
-            // Gestione chiusura graceful
-            this.setupGracefulShutdown();
-
-        } catch (error) {
-            console.error('❌ Errore avvio server:', error.message);
-            process.exit(1);
-        }
-    }
-
-    /**
-     * Configurazione chiusura graceful
-     */
-    setupGracefulShutdown() {
-        const gracefulShutdown = async (signal) => {
-            console.log(`\n🛑 Ricevuto segnale ${signal}. Chiusura graceful...`);
-            
-            if (this.server) {
-                this.server.close(async () => {
-                    console.log('✅ Server HTTP chiuso');
-                    
-                    try {
-                        // Pulisci token scaduti prima della chiusura
-                        const AuthService = require('./auth/authService');
-                        const cleanedTokens = await AuthService.cleanExpiredTokens();
-                        console.log(`✅ Puliti ${cleanedTokens} token scaduti`);
-                        
-                        await database.close();
-                        console.log('✅ Database chiuso');
-                        console.log('✅ Chiusura completata');
-                        process.exit(0);
-                    } catch (error) {
-                        console.error('❌ Errore chiusura database:', error.message);
-                        process.exit(1);
-                    }
-                });
-            }
-        };
-
-        // Gestione segnali di chiusura
-        process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-        process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-        
-        // Gestione errori non gestiti
-        process.on('uncaughtException', (error) => {
-            console.error('❌ Errore non gestito:', error.message);
-            gracefulShutdown('uncaughtException');
-        });
-
-        process.on('unhandledRejection', (reason, promise) => {
-            console.error('❌ Promise rifiutata non gestita:', reason);
-            gracefulShutdown('unhandledRejection');
-        });
-    }
-
-    /**
-     * Ottiene l'istanza dell'app Express
-     */
-    getApp() {
-        return this.app;
-    }
-
-    /**
-     * Ottiene l'istanza del server
-     */
-    getServer() {
-        return this.server;
-    }
-}
-
-// Creazione e avvio del server
-const bibliotecaSecureServer = new BibliotecaSecureServer();
-
-// Avvio del server solo se il file viene eseguito direttamente
-if (require.main === module) {
-    bibliotecaSecureServer.start().catch((error) => {
-        console.error('❌ Errore critico:', error.message);
-        process.exit(1);
     });
-}
+});
 
-module.exports = bibliotecaSecureServer;
+// Middleware per la gestione centralizzata degli errori
+app.use(errorHandler);
+
+// Avvio del server
+const PORT = config.server.port;
+server.listen(PORT, () => {
+    console.log(`🔐 ${config.api.name} in ascolto sulla porta ${PORT} in ambiente ${config.server.environment}`);
+    console.log('📚 API disponibili:');
+    console.log('   - GET    /health');
+    console.log('   - GET    /api');
+    console.log('   - POST   /api/auth/register');
+    console.log('   - POST   /api/auth/login');
+    console.log('   - POST   /api/auth/logout');
+    console.log('   - GET    /api/auth/profile');
+    console.log('   - GET    /api/libri');
+    console.log('   - GET    /api/libri/:id');
+    console.log('   - POST   /api/libri (librarian+)');
+    console.log('   - PUT    /api/libri/:id (librarian+)');
+    console.log('   - DELETE /api/libri/:id (admin)');
+    console.log('   - GET    /api/utenti (admin)');
+    console.log('   - GET    /api/utenti/:id (admin)');
+    console.log('   - POST   /api/utenti (admin)');
+    console.log('   - PUT    /api/utenti/:id (admin)');
+    console.log('   - DELETE /api/utenti/:id (admin)');
+    console.log('   - GET    /api/prestiti (librarian+)');
+    console.log('   - GET    /api/prestiti/stats (librarian+)');
+    console.log('   - POST   /api/prestiti (librarian+)');
+    console.log('   - PUT    /api/prestiti/:id/restituisci (librarian+)');
+    console.log('   - DELETE /api/prestiti/:id (admin)');
+});
+
+// Gestione della chiusura del server
+process.on('SIGTERM', () => {
+    console.log('SIGTERM signal received: closing HTTP server');
+    server.close(() => {
+        console.log('HTTP server closed');
+        db.close((err) => {
+            if (err) {
+                console.error('Error closing database:', err.message);
+            } else {
+                console.log('Database connection closed.');
+            }
+            process.exit(0);
+        });
+    });
+});
+
+process.on('SIGINT', () => {
+    console.log('SIGINT signal received: closing HTTP server');
+    server.close(() => {
+        console.log('HTTP server closed');
+        db.close((err) => {
+            if (err) {
+                console.error('Error closing database:', err.message);
+            } else {
+                console.log('Database connection closed.');
+            }
+            process.exit(0);
+        });
+    });
+});

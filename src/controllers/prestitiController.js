@@ -1,0 +1,78 @@
+const Prestito = require('../models/Prestito');
+
+exports.getAllPrestiti = async (req, res, next) => {
+    try {
+        const { limit, offset, sortBy, sortOrder } = req.query;
+        const prestiti = await Prestito.findAll({ 
+            limit: limit ? parseInt(limit) : 50, 
+            offset: offset ? parseInt(offset) : 0, 
+            sortBy, 
+            sortOrder 
+        });
+        res.status(200).json({ 
+            success: true, 
+            data: prestiti, 
+            count: prestiti.length, 
+            limit: limit ? parseInt(limit) : 50, 
+            offset: offset ? parseInt(offset) : 0 
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+exports.getPrestitoById = async (req, res, next) => {
+    try {
+        const prestito = await Prestito.findById(req.params.id);
+        if (!prestito) {
+            return res.status(404).json({ success: false, error: { message: 'Prestito non trovato', status: 404 } });
+        }
+        res.status(200).json({ success: true, data: prestito });
+    } catch (error) {
+        next(error);
+    }
+};
+
+exports.createPrestito = async (req, res, next) => {
+    try {
+        const newPrestito = new Prestito(req.body);
+        const savedPrestito = await newPrestito.save();
+        res.status(201).json({ success: true, data: savedPrestito, message: 'Prestito creato con successo' });
+    } catch (error) {
+        next(error);
+    }
+};
+
+exports.returnPrestito = async (req, res, next) => {
+    try {
+        const existingPrestito = await Prestito.findById(req.params.id);
+        if (!existingPrestito) {
+            return res.status(404).json({ success: false, error: { message: 'Prestito non trovato', status: 404 } });
+        }
+        const returnedPrestito = await existingPrestito.returnBook();
+        res.status(200).json({ success: true, data: returnedPrestito, message: 'Libro restituito con successo' });
+    } catch (error) {
+        next(error);
+    }
+};
+
+exports.getPrestitoStats = async (req, res, next) => {
+    try {
+        const stats = await Prestito.getStats();
+        res.status(200).json({ success: true, data: stats });
+    } catch (error) {
+        next(error);
+    }
+};
+
+exports.deletePrestito = async (req, res, next) => {
+    try {
+        const changes = await Prestito.delete(req.params.id);
+        if (changes === 0) {
+            return res.status(404).json({ success: false, error: { message: 'Prestito non trovato', status: 404 } });
+        }
+        res.status(200).json({ success: true, message: 'Prestito eliminato con successo' });
+    } catch (error) {
+        next(error);
+    }
+};

@@ -6,7 +6,7 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const config = require('../config/config');
-const database = require('./database');
+const database = require('../config/database');
 
 class AuthService {
     /**
@@ -151,38 +151,52 @@ class AuthService {
      * Valida le credenziali di login
      */
     static async validateCredentials(email, password) {
-        const sql = 'SELECT * FROM utenti WHERE email = ? AND account_bloccato = 0';
-        const user = await database.get(sql, [email]);
-        
-        if (!user) {
-            return { valid: false, error: 'Credenziali non valide' };
-        }
-
-        const isValidPassword = await this.verifyPassword(password, user.password_hash);
-        
-        if (!isValidPassword) {
-            // Incrementa tentativi di login
-            await this.incrementLoginAttempts(user.id);
-            return { valid: false, error: 'Credenziali non valide' };
-        }
-
-        // Reset tentativi di login
-        await this.resetLoginAttempts(user.id);
-        
-        // Aggiorna ultimo accesso
-        await this.updateLastAccess(user.id);
-
-        return { 
-            valid: true, 
-            user: {
-                id: user.id,
-                nome: user.nome,
-                cognome: user.cognome,
-                email: user.email,
-                ruolo: user.ruolo,
-                email_verificata: user.email_verificata
+        return new Promise((resolve, reject) => {
+            if (!database) {
+                reject(new Error('Database non inizializzato'));
+                return;
             }
-        };
+            
+            const sql = 'SELECT * FROM utenti WHERE email = ? AND account_bloccato = 0';
+            database.get(sql, [email], async (err, user) => {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                
+                if (!user) {
+                    resolve({ valid: false, error: 'Credenziali non valide' });
+                    return;
+                }
+
+                try {
+                    const isValidPassword = await this.verifyPassword(password, user.password_hash);
+                    
+                    if (!isValidPassword) {
+                        await this.incrementLoginAttempts(user.id);
+                        resolve({ valid: false, error: 'Credenziali non valide' });
+                        return;
+                    }
+
+                    await this.resetLoginAttempts(user.id);
+                    await this.updateLastAccess(user.id);
+
+                    resolve({ 
+                        valid: true, 
+                        user: {
+                            id: user.id,
+                            nome: user.nome,
+                            cognome: user.cognome,
+                            email: user.email,
+                            ruolo: user.ruolo,
+                            email_verificata: user.email_verificata
+                        }
+                    });
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        });
     }
 
     /**
