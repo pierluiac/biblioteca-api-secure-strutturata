@@ -1,0 +1,38 @@
+{
+  "name": "biblioteca-api-secure-strutturata",
+  "version": "1.0.0",
+  "description": "API REST per gestione biblioteca con autenticazione JWT - versione strutturata",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "api",
+    "rest",
+    "biblioteca",
+    "express",
+    "sqlite",
+    "nodejs",
+    "jwt",
+    "authentication",
+    "security"
+  ],
+  "author": "TPSI-5",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "sqlite3": "^5.1.6",
+    "cors": "^2.8.5",
+    "morgan": "^1.10.0",
+    "jsonwebtoken": "^9.0.2",
+    "bcrypt": "^5.1.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
