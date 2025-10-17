@@ -21,10 +21,11 @@ class Libro {
         if (!this.autore || this.autore.trim() === '') {
             errors.push('L\'autore è obbligatorio');
         }
-        if (!this.isbn || this.isbn.trim() === '') {
-            errors.push('L\'ISBN è obbligatorio');
-        } else if (!/^\d{9}[\dX]$/.test(this.isbn.replace(/[- ]/g, '')) && !/^(978|979)-\d{1,5}-\d{1,7}-\d{1,6}-[\dX]$/.test(this.isbn)) {
-            errors.push('Il formato ISBN non è valido');
+        // ISBN è ora opzionale, ma se presente deve essere valido
+        if (this.isbn && this.isbn.trim() !== '') {
+            if (!/^\d{9}[\dX]$/.test(this.isbn.replace(/[- ]/g, '')) && !/^(978|979)-\d{1,5}-\d{1,7}-\d{1,6}-[\dX]$/.test(this.isbn)) {
+                errors.push('Il formato ISBN non è valido');
+            }
         }
         if (this.anno_pubblicazione && (isNaN(this.anno_pubblicazione) || this.anno_pubblicazione < 0 || this.anno_pubblicazione > new Date().getFullYear())) {
             errors.push('L\'anno di pubblicazione non è valido');

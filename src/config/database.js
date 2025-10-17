@@ -15,7 +15,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     titolo TEXT NOT NULL,
                     autore TEXT NOT NULL,
-                    isbn TEXT UNIQUE NOT NULL,
+                    isbn TEXT,
                     anno_pubblicazione INTEGER,
                     genere TEXT,
                     disponibile BOOLEAN DEFAULT 1,
@@ -71,13 +71,16 @@ const db = new sqlite3.Database(dbPath, (err) => {
             // Seed initial data if tables are empty
             db.get("SELECT COUNT(*) as count FROM libri", (err, row) => {
                 if (row.count === 0) {
-                    db.run(`INSERT INTO libri (titolo, autore, isbn, anno_pubblicazione, genere) VALUES
-                        ('Il Signore degli Anelli', 'J.R.R. Tolkien', '978-88-04-12345-6', 1954, 'Fantasy'),
-                        ('1984', 'George Orwell', '978-88-04-12346-3', 1949, 'Distopia'),
-                        ('Il Piccolo Principe', 'Antoine de Saint-Exupéry', '978-88-04-12347-0', 1943, 'Favola'),
-                        ('Dune', 'Frank Herbert', '978-88-04-12348-7', 1965, 'Fantascienza'),
-                        ('Neuromante', 'William Gibson', '978-88-04-12349-4', 1984, 'Cyberpunk');
-                    `);
+                db.run(`INSERT INTO libri (titolo, autore, isbn, anno_pubblicazione, genere) VALUES
+                    ('Il Signore degli Anelli', 'J.R.R. Tolkien', '978-88-04-12345-6', 1954, 'Fantasy'),
+                    ('Il Signore degli Anelli', 'J.R.R. Tolkien', '978-88-04-12345-6', 1954, 'Fantasy'),
+                    ('1984', 'George Orwell', '978-88-04-12346-3', 1949, 'Distopia'),
+                    ('Il Piccolo Principe', 'Antoine de Saint-Exupéry', NULL, 1943, 'Favola'),
+                    ('Dune', 'Frank Herbert', '978-88-04-12348-7', 1965, 'Fantascienza'),
+                    ('Dune', 'Frank Herbert', '978-88-04-12348-7', 1965, 'Fantascienza'),
+                    ('Neuromante', 'William Gibson', NULL, 1984, 'Cyberpunk'),
+                    ('Manuale di Programmazione', 'Autore Sconosciuto', NULL, 2020, 'Tecnico');
+                `);
                 }
             });
 

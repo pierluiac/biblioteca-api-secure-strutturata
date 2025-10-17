@@ -67,10 +67,24 @@ exports.getPrestitoStats = async (req, res, next) => {
 
 exports.deletePrestito = async (req, res, next) => {
     try {
-        const changes = await Prestito.delete(req.params.id);
-        if (changes === 0) {
+        const prestito = await Prestito.findById(req.params.id);
+        
+        if (!prestito) {
             return res.status(404).json({ success: false, error: { message: 'Prestito non trovato', status: 404 } });
         }
+        
+        // Controlla se il prestito è stato restituito
+        if (prestito.data_restituzione === null) {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    message: 'Impossibile eliminare prestito non restituito. Restituire prima il libro.',
+                    status: 400
+                }
+            });
+        }
+        
+        const changes = await Prestito.delete(req.params.id);
         res.status(200).json({ success: true, message: 'Prestito eliminato con successo' });
     } catch (error) {
         next(error);
