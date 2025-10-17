@@ -47,10 +47,47 @@ class Prestito {
         };
     }
 
-    static async findAll({ limit = 50, offset = 0, sortBy = 'id', sortOrder = 'ASC' }) {
+    static async findAll({ limit = 50, offset = 0, sortBy = 'id', sortOrder = 'ASC', search = '', stato = '' }) {
         return new Promise((resolve, reject) => {
-            const query = `SELECT * FROM prestiti ORDER BY ${sortBy} ${sortOrder} LIMIT ? OFFSET ?`;
-            db.all(query, [limit, offset], (err, rows) => {
+            let sql = `
+                SELECT p.*, 
+                       l.titolo as libro_titolo, l.autore as libro_autore, l.isbn as libro_isbn,
+                       u.nome as utente_nome, u.cognome as utente_cognome, u.email as utente_email
+                FROM prestiti p
+                LEFT JOIN libri l ON p.libro_id = l.id
+                LEFT JOIN utenti u ON p.utente_id = u.id
+                WHERE 1=1
+            `;
+            const params = [];
+
+            // Filtro per stato
+            if (stato) {
+                if (stato === 'attivi') {
+                    sql += ' AND p.data_restituzione IS NULL';
+                } else if (stato === 'restituiti') {
+                    sql += ' AND p.data_restituzione IS NOT NULL';
+                } else if (stato === 'scaduti') {
+                    sql += ' AND p.data_restituzione IS NULL AND p.data_scadenza < CURRENT_TIMESTAMP';
+                }
+            }
+
+            // Filtro per ricerca
+            if (search) {
+                sql += ` AND (
+                    l.titolo LIKE ? OR 
+                    l.autore LIKE ? OR 
+                    u.nome LIKE ? OR 
+                    u.cognome LIKE ? OR 
+                    u.email LIKE ?
+                )`;
+                const searchTerm = `%${search}%`;
+                params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
+            }
+
+            sql += ` ORDER BY p.${sortBy} ${sortOrder} LIMIT ? OFFSET ?`;
+            params.push(limit, offset);
+
+            db.all(sql, params, (err, rows) => {
                 if (err) {
                     reject(err);
                 } else {
@@ -137,6 +174,51 @@ class Prestito {
         this.data_restituzione = new Date();
         this.updateStatus(); // Recalculate status and overdue days
         return this.save();
+    }
+
+    static async count(stato = '', search = '') {
+        return new Promise((resolve, reject) => {
+            let sql = `
+                SELECT COUNT(*) as count
+                FROM prestiti p
+                LEFT JOIN libri l ON p.libro_id = l.id
+                LEFT JOIN utenti u ON p.utente_id = u.id
+                WHERE 1=1
+            `;
+            const params = [];
+
+            // Filtro per stato
+            if (stato) {
+                if (stato === 'attivi') {
+                    sql += ' AND p.data_restituzione IS NULL';
+                } else if (stato === 'restituiti') {
+                    sql += ' AND p.data_restituzione IS NOT NULL';
+                } else if (stato === 'scaduti') {
+                    sql += ' AND p.data_restituzione IS NULL AND p.data_scadenza < CURRENT_TIMESTAMP';
+                }
+            }
+
+            // Filtro per ricerca
+            if (search) {
+                sql += ` AND (
+                    l.titolo LIKE ? OR 
+                    l.autore LIKE ? OR 
+                    u.nome LIKE ? OR 
+                    u.cognome LIKE ? OR 
+                    u.email LIKE ?
+                )`;
+                const searchTerm = `%${search}%`;
+                params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
+            }
+
+            db.get(sql, params, (err, row) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(row.count);
+                }
+            });
+        });
     }
 
     static async delete(id) {

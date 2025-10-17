@@ -2,19 +2,27 @@ const Prestito = require('../models/Prestito');
 
 exports.getAllPrestiti = async (req, res, next) => {
     try {
-        const { limit, offset, sortBy, sortOrder } = req.query;
+        const { limit, offset, sortBy, sortOrder, search, stato } = req.query;
         const prestiti = await Prestito.findAll({ 
             limit: limit ? parseInt(limit) : 50, 
             offset: offset ? parseInt(offset) : 0, 
             sortBy, 
-            sortOrder 
+            sortOrder,
+            search: search || '',
+            stato: stato || ''
         });
+        
+        const total = await Prestito.count(stato || '', search || '');
+        
         res.status(200).json({ 
             success: true, 
             data: prestiti, 
-            count: prestiti.length, 
+            count: prestiti.length,
+            total: total,
             limit: limit ? parseInt(limit) : 50, 
-            offset: offset ? parseInt(offset) : 0 
+            offset: offset ? parseInt(offset) : 0,
+            search: search || '',
+            stato: stato || ''
         });
     } catch (error) {
         next(error);
