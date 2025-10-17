@@ -36,14 +36,26 @@ class Libro {
         };
     }
 
-    static async findAll({ limit = 50, offset = 0, sortBy = 'id', sortOrder = 'ASC' }) {
+    static async findAll({ limit = 50, offset = 0, sortBy = 'id', sortOrder = 'ASC', search = '' }) {
         return new Promise((resolve, reject) => {
             if (!db) {
                 reject(new Error('Database non inizializzato'));
                 return;
             }
-            const query = `SELECT * FROM libri ORDER BY ${sortBy} ${sortOrder} LIMIT ? OFFSET ?`;
-            db.all(query, [limit, offset], (err, rows) => {
+            
+            let sql = 'SELECT * FROM libri WHERE 1=1';
+            const params = [];
+
+            if (search) {
+                sql += ' AND (titolo LIKE ? OR autore LIKE ? OR genere LIKE ?)';
+                const searchTerm = `%${search}%`;
+                params.push(searchTerm, searchTerm, searchTerm);
+            }
+
+            sql += ` ORDER BY ${sortBy} ${sortOrder} LIMIT ? OFFSET ?`;
+            params.push(limit, offset);
+
+            db.all(sql, params, (err, rows) => {
                 if (err) {
                     reject(err);
                 } else {
@@ -95,6 +107,27 @@ class Libro {
                     }
                 });
             }
+        });
+    }
+
+    static async count(search = '') {
+        return new Promise((resolve, reject) => {
+            let sql = 'SELECT COUNT(*) as count FROM libri WHERE 1=1';
+            const params = [];
+
+            if (search) {
+                sql += ' AND (titolo LIKE ? OR autore LIKE ? OR genere LIKE ?)';
+                const searchTerm = `%${search}%`;
+                params.push(searchTerm, searchTerm, searchTerm);
+            }
+
+            db.get(sql, params, (err, row) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(row.count);
+                }
+            });
         });
     }
 

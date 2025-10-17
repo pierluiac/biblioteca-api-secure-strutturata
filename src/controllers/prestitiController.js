@@ -16,13 +16,13 @@ exports.getAllPrestiti = async (req, res, next) => {
         
         res.status(200).json({ 
             success: true, 
-            data: prestiti, 
-            count: prestiti.length,
-            total: total,
-            limit: limit ? parseInt(limit) : 50, 
-            offset: offset ? parseInt(offset) : 0,
-            search: search || '',
-            stato: stato || ''
+            data: prestiti,
+            pagination: {
+                total,
+                limit: limit ? parseInt(limit) : 50, 
+                offset: offset ? parseInt(offset) : 0,
+                hasMore: (offset ? parseInt(offset) : 0) + (limit ? parseInt(limit) : 50) < total
+            }
         });
     } catch (error) {
         next(error);

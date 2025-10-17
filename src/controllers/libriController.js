@@ -2,19 +2,26 @@ const Libro = require('../models/Libro');
 
 exports.getAllLibri = async (req, res, next) => {
     try {
-        const { limit, offset, sortBy, sortOrder } = req.query;
+        const { limit, offset, sortBy, sortOrder, search } = req.query;
         const libri = await Libro.findAll({ 
             limit: limit ? parseInt(limit) : 50, 
             offset: offset ? parseInt(offset) : 0, 
             sortBy, 
-            sortOrder 
+            sortOrder,
+            search: search || ''
         });
+        
+        const total = await Libro.count(search || '');
+        
         res.status(200).json({ 
             success: true, 
-            data: libri, 
-            count: libri.length, 
-            limit: limit ? parseInt(limit) : 50, 
-            offset: offset ? parseInt(offset) : 0 
+            data: libri,
+            pagination: {
+                total,
+                limit: limit ? parseInt(limit) : 50, 
+                offset: offset ? parseInt(offset) : 0,
+                hasMore: (offset ? parseInt(offset) : 0) + (limit ? parseInt(limit) : 50) < total
+            }
         });
     } catch (error) {
         next(error);
