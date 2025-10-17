@@ -113,28 +113,96 @@ class Prestito {
 
     static async getStats() {
         return new Promise((resolve, reject) => {
+            // Query principale per statistiche base
             db.get(`
                 SELECT
-                    COUNT(*) AS total,
-                    SUM(CASE WHEN data_restituzione IS NULL THEN 1 ELSE 0 END) AS attivi,
-                    SUM(CASE WHEN data_restituzione IS NOT NULL THEN 1 ELSE 0 END) AS restituiti,
-                    SUM(CASE WHEN data_restituzione IS NULL AND data_scadenza < CURRENT_TIMESTAMP THEN 1 ELSE 0 END) AS scaduti
+                    COUNT(*) AS totale_prestiti,
+                    SUM(CASE WHEN data_restituzione IS NULL THEN 1 ELSE 0 END) AS prestiti_attivi,
+                    SUM(CASE WHEN data_restituzione IS NOT NULL THEN 1 ELSE 0 END) AS prestiti_restituiti,
+                    SUM(CASE WHEN data_restituzione IS NULL AND data_scadenza < CURRENT_TIMESTAMP THEN 1 ELSE 0 END) AS prestiti_scaduti
                 FROM prestiti
-            `, (err, row) => {
+            `, (err, baseStats) => {
                 if (err) {
                     reject(err);
-                } else {
-                    const total = row.total;
-                    const scaduti = row.scaduti;
-                    const percentuale_scaduti = total > 0 ? (scaduti / total * 100).toFixed(2) : 0;
-                    resolve({
-                        total: total,
-                        attivi: row.attivi,
-                        restituiti: row.restituiti,
-                        scaduti: scaduti,
-                        percentuale_scaduti: parseFloat(percentuale_scaduti)
-                    });
+                    return;
                 }
+
+                // Query per libro più prestato
+                db.get(`
+                    SELECT 
+                        l.titolo,
+                        COUNT(*) as conteggio
+                    FROM prestiti p
+                    LEFT JOIN libri l ON p.libro_id = l.id
+                    WHERE l.titolo IS NOT NULL
+                    GROUP BY l.titolo
+                    ORDER BY conteggio DESC
+                    LIMIT 1
+                `, (err, libroPiuPrestato) => {
+                    if (err) {
+                        reject(err);
+                        return;
+                    }
+
+                    // Query per utente più attivo
+                    db.get(`
+                        SELECT 
+                            u.nome || ' ' || u.cognome as nome_completo,
+                            COUNT(*) as conteggio
+                        FROM prestiti p
+                        LEFT JOIN utenti u ON p.utente_id = u.id
+                        WHERE u.nome IS NOT NULL AND u.cognome IS NOT NULL
+                        GROUP BY u.nome, u.cognome
+                        ORDER BY conteggio DESC
+                        LIMIT 1
+                    `, (err, utentePiuAttivo) => {
+                        if (err) {
+                            reject(err);
+                            return;
+                        }
+
+                        // Query per media giorni prestito
+                        db.get(`
+                            SELECT 
+                                AVG(
+                                    CASE 
+                                        WHEN data_restituzione IS NOT NULL 
+                                        THEN julianday(data_restituzione) - julianday(data_prestito)
+                                        ELSE NULL 
+                                    END
+                                ) as media_giorni_prestito
+                            FROM prestiti
+                            WHERE data_prestito IS NOT NULL AND data_restituzione IS NOT NULL
+                        `, (err, mediaGiorni) => {
+                            if (err) {
+                                reject(err);
+                                return;
+                            }
+
+                            // Calcola percentuale scaduti
+                            const percentualeScaduti = baseStats.totale_prestiti > 0 ? 
+                                (baseStats.prestiti_scaduti / baseStats.totale_prestiti * 100).toFixed(2) : 0;
+
+                            resolve({
+                                totale_prestiti: baseStats.totale_prestiti,
+                                prestiti_attivi: baseStats.prestiti_attivi,
+                                prestiti_restituiti: baseStats.prestiti_restituiti,
+                                prestiti_scaduti: baseStats.prestiti_scaduti,
+                                percentuale_scaduti: parseFloat(percentualeScaduti),
+                                libro_piu_prestato: libroPiuPrestato ? {
+                                    titolo: libroPiuPrestato.titolo,
+                                    conteggio: libroPiuPrestato.conteggio
+                                } : null,
+                                utente_piu_attivo: utentePiuAttivo ? {
+                                    nome_completo: utentePiuAttivo.nome_completo,
+                                    conteggio: utentePiuAttivo.conteggio
+                                } : null,
+                                media_giorni_prestito: mediaGiorni.media_giorni_prestito ? 
+                                    Math.round(mediaGiorni.media_giorni_prestito * 10) / 10 : 0
+                            });
+                        });
+                    });
+                });
             });
         });
     }
